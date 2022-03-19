@@ -1,1 +1,1 @@
-# ./arpspoof <interface> <target> <gateway>
+./arpspoof <interface> <target> <gateway>
