@@ -24,7 +24,7 @@ uint8_t* construct_arp_pac(int sock_r, struct sockaddr_ll socket_address, unsign
         arp_hdr->arp_sha[i] = *(sha+i);
         if(op == ARPOP_REQUEST)
             arp_hdr->arp_tha[i] = 0x00;
-        else if(op == ARPOP_REQUEST)
+        else if(op == ARPOP_REPLY)
             arp_hdr->arp_tha[i] = *(tha+i);  
     }
     for(i = 0; i< 4; i++){
