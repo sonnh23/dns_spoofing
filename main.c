@@ -34,8 +34,10 @@ int main(int argc, char** argv[]){
         fprintf(stderr, "Error in creating socket\n");
         return -1;
     }
-
-    system("ip link set dev h1-eth0 arp off");  //turn off arp of h1-eth0
+    char cmd[1024];
+    memset(cmd, 0, 1024);
+    //sprintf(cmd, "ip link set dev %s arp off", interface);
+    //system("ip link set dev h1-eth0 arp off");  //turn off arp of the interface
     struct ifreq if_idx, if_mac, if_ip;
 
     //copy :()
