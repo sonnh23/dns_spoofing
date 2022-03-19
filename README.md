@@ -1,1 +1,1 @@
-# arp_spoofing
+# ./arpspoof <interface> <target> <gateway>
