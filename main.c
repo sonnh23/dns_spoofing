@@ -84,7 +84,8 @@ int main(int argc, char** argv[]){
 
     pthread_t attacking;
 
-    attacking_args_t *args;
+    attacking_args_t *args = (attacking_args_t*) malloc(sizeof(attacking_args_t));
+
     args->sock_r = sock_r;
     args->socket_address = socket_address;
     args->addr_len = addr_len;
@@ -94,4 +95,5 @@ int main(int argc, char** argv[]){
     args->target_ip = ip_target;
     pthread_create(&attacking, NULL, send_arp_reply_fmac, (void*) args);
     pthread_join(attacking, NULL);
+    free(args);
 }

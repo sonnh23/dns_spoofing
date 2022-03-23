@@ -81,6 +81,7 @@ uint8_t* get_target_mac(int sock_r, struct sockaddr_ll socket_address, unsigned 
     } while(1);
 }
 void *send_arp_reply_fmac(void *args){
+    fprintf(stderr,"Check1\n");
     attacking_args_t *argument = (attacking_args_t*) args;
     uint8_t* arp_rep = construct_arp_pac(argument->sock_r, argument->socket_address, argument->addr_len, argument->my_mac, argument->target_mac, argument->gateway_ip, argument->target_ip, ARPOP_REPLY);
     /*
