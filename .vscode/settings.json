@@ -3,6 +3,12 @@
         "if_ether.h": "c",
         "if_arp.h": "c",
         "types.h": "c",
-        "stdio.h": "c"
+        "stdio.h": "c",
+        "if.h": "c",
+        "if_packet.h": "c",
+        "ethernet.h": "c",
+        "ip.h": "c",
+        "in.h": "c",
+        "udp.h": "c"
     }
 }

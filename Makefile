@@ -1,8 +1,10 @@
 CC = gcc
 
-arpspoof: main.o arpspoof.o 
-	$(CC) -o arpspoof main.o arpspoof.o -lpthread
+spoof: main.o arpspoof.o dnsspoof.o
+	$(CC) -o spoof main.o arpspoof.o dnsspoof.o -lpthread
 main.o: main.c 
 	$(CC) -c main.c -lpthread
-arospoof.o: arpspoof.c arpspoof.h
+arpspoof.o: arpspoof.c arpspoof.h
 	$(CC) -c arpspoof.c
+dnsspoof.o: dnsspoof.c dnsspoof.h
+	$(CC) -c dnsspoof.c
