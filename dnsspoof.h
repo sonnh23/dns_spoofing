@@ -29,6 +29,6 @@ struct dnshdr {
 	uint16_t	nother;		/* Other PRs */
 	unsigned char	data[1];	/* Data, variable length */
 };
-void* dns_spoofing(void* args);
-
+void* target_to_gateway(void* args);
+void* gateway_to_target(void* args);
 #endif
