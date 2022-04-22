@@ -9,6 +9,10 @@
         "ethernet.h": "c",
         "ip.h": "c",
         "in.h": "c",
-        "udp.h": "c"
+        "udp.h": "c",
+        "socket.h": "c",
+        "arpspoof.h": "c",
+        "utils.h": "c",
+        "dnsspoof.h": "c"
     }
 }

