@@ -25,7 +25,8 @@
 #define REQUEST_SIZE 100
 
 #define QNAME_LEN 16 //len of www.facebook.com
-
+#define TYPE_A 0x0001
+#define CLASS_IN 0x0001
 struct dnshdr {
 	uint16_t	tid;		/* Transaction ID */
 	uint16_t	flags;		/* Flags */
