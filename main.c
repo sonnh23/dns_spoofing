@@ -9,7 +9,21 @@ void usage()
     fprintf(stderr, "Usage: ./dnsspoof <interface> <target> <gateway>\n");
     exit(0);
 }
-
+void* detect_ctrlD(void* interface){
+        fprintf(stderr, "Waiting Ctrl D\n");
+    char* iface = (char*) interface;
+    char c;
+    c = getc(stdin);
+    if( c == -1){
+        char cmd[1024];
+        memset(cmd, 0, 1024);
+        sprintf(cmd, "ip link set dev %s arp on", iface);
+        system(cmd);
+        fprintf(stderr, "Turning ARP on...\n");
+        sleep(0.5);
+        exit(0);
+    }
+}
 int main(int argc, char** argv[]){
     if(argc != 4)
         usage();
@@ -94,6 +108,10 @@ int main(int argc, char** argv[]){
     socket_address.sll_halen = ETH_ALEN;
     socket_address.sll_family = AF_PACKET;
     unsigned int addr_len = (unsigned int) sizeof(struct sockaddr_ll);
+
+    pthread_t detect_ctrl_D;
+    pthread_create(&detect_ctrl_D, NULL, detect_ctrlD, (void*) &interface);
+
     uint8_t *target_mac, *gateway_mac;
     target_mac = get_mac(fd, socket_address, addr_len, my_mac, my_ip, ip_target);
     gateway_mac = get_mac(fd, socket_address, addr_len, my_mac, my_ip, ip_gateway);
@@ -117,12 +135,16 @@ int main(int argc, char** argv[]){
     args->my_ip = my_ip;
     args->ip_dns_fake = ip_dns_fake;
     args->qname = qname;
+
     pthread_create(&arpspoof, NULL, arp_spoofing, (void*) args);
     pthread_create(&tar_to_gtw, NULL, target_to_gateway, (void*) args);
     pthread_create(&gtw_to_tar, NULL, gateway_to_target, (void*) args);
+
+
     pthread_join(arpspoof, NULL);
     pthread_join(tar_to_gtw, NULL);
     pthread_join(gtw_to_tar, NULL);
+    pthread_join(detect_ctrl_D, NULL);
 
     free(args);
 

@@ -107,7 +107,7 @@ uint8_t* construct_dns_response(uint8_t* ether_shost, uint8_t* ether_dhost, //l2
     ip_hdr->version = 4;
     ip_hdr->ihl = 5;
     ip_hdr->tos = 0x00;
-
+    ip_hdr->tot_len =  htons(sizeof(struct iphdr) + sizeof(struct udphdr) + sizeof(struct dnshdr) + query_data_len + sizeof(struct dnsanswer) );
     ip_hdr->id = htons(id);
     ip_hdr->frag_off = htons(0x0000);
     ip_hdr->ttl = 64;
@@ -116,15 +116,15 @@ uint8_t* construct_dns_response(uint8_t* ether_shost, uint8_t* ether_dhost, //l2
         ip_hdr->saddr[i] = *(saddr+i);
         ip_hdr->daddr[i] = *(daddr+i);
     }
-    ip_hdr->check = 0x0000; //////////////////////////////////////////////////////////////////// must be changed
+    ip_hdr->check = 0x0000; 
 
     struct udphdr *udp_hdr = (struct udphdr*) malloc(sizeof(struct udphdr)); //8byte
         udp_hdr->uh_sport = htons(53);
         udp_hdr->uh_dport = uh_dport;
-        udp_hdr->uh_ulen = htons(42); //////////////////////////////////////////////////////////////////// must be changed
-        udp_hdr->check = 0x0000;    //////////////////////////////////////////////////////////////////// must be changed
+        udp_hdr->uh_ulen = htons( sizeof(struct udphdr) + sizeof(struct dnshdr) + query_data_len + sizeof(struct dnsanswer)  ); 
+        udp_hdr->uh_sum = htons(0x0000);    
     
-    struct dnshdr *dns_hdr = (struct dnshdr*) malloc(sizeof(struct dnshdr));    //12byte + 22byte data query
+    struct dnshdr *dns_hdr = (struct dnshdr*) malloc(sizeof(struct dnshdr));    
     dns_hdr->tid = tid;
     dns_hdr->flags = htons(0x8180); //Standard query response, no error
     dns_hdr->questitons = htons(0x0001);
@@ -132,7 +132,7 @@ uint8_t* construct_dns_response(uint8_t* ether_shost, uint8_t* ether_dhost, //l2
     dns_hdr->auth_rrs = htons(0x0000);
     dns_hdr->add_rrs= htons(0x0000);
 
-    struct dnsanswer *dns_answer = (struct dnsanswer*) malloc(sizeof(struct dnsanswer)); //10bytes
+    struct dnsanswer *dns_answer = (struct dnsanswer*) malloc(sizeof(struct dnsanswer)); 
     dns_answer->qname_pointer = htons(0xc00c);
     dns_answer->type = htons(0x0001);
     dns_answer->class = htons(0x0001);
@@ -141,13 +141,11 @@ uint8_t* construct_dns_response(uint8_t* ether_shost, uint8_t* ether_dhost, //l2
     for(i=0;i< 4;i++)
         *(dns_answer->data+i) = *(ip_spoof+i);
 
-    //cal checksum and len
-    udp_hdr->len = htons( sizeof(struct udphdr) + sizeof(struct dnshdr) + query_data_len + sizeof(struct dnsanswer) );
     //fprintf(stderr, "UDP Len: %d byte\n", ntohs(udp_hdr->len));
-    udp_hdr->uh_sum = cksum( udp_hdr, ntohs(udp_hdr->len));
+    udp_hdr->uh_sum = cksum( udp_hdr, ntohs(udp_hdr->uh_ulen));
 
 
-    ip_hdr->tot_len =  htons(sizeof(struct iphdr) + sizeof(struct udphdr) + sizeof(struct dnshdr) + query_data_len + sizeof(struct dnsanswer) );
+
     //fprintf(stderr, "IP Len: %d byte\n", ntohs(ip_hdr->tot_len));
     ip_hdr->check = cksum(ip_hdr, sizeof(struct iphdr));
 
