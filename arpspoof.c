@@ -65,7 +65,7 @@ uint8_t* get_mac(int sock_r, struct sockaddr_ll socket_address, unsigned int add
         if(!sendto(sock_r, arp_req, ARP_PACKET_LEN, 0, (struct sockaddr*) &socket_address, addr_len))
             fprintf(stderr,"Error in getting MAC...\n");
         else
-            fprintf(stderr,"Getting MAC...\n");
+            //fprintf(stderr,"Getting MAC...\n");
         //sleep(3);
         byte_recv = recvfrom(sock_r, arp_rep, ARP_PACKET_LEN, 0, (struct sockaddr*) &socket_address, &addr_len);
         

