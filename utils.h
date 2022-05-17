@@ -36,5 +36,5 @@ typedef struct attacking_args attacking_args_t;
 int compare_mac(uint8_t* mac_1, uint8_t* mac_2);
 int compare_ip(uint8_t* ip_1, uint8_t* ip_2);
 
-
+void dns_pac_status(uint8_t* pac, char* qname, uint16_t qtype, uint16_t qclass);
 #endif

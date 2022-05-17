@@ -3,31 +3,9 @@
 #include "utils.h"
 #include <pthread.h>
 
+void usage();
+void* detect_ctrlD(void* interface);
 
-void usage()
-{
-    fprintf(stderr, "Usage: ./dnsspoof <interface> <target> <gateway> <qname> <dns ip>\n");
-    exit(0);
-}
-void* detect_ctrlD(void* interface){
-    char* iface = (char*) interface;
-    char cmd[1024];
-    memset(cmd, 0, 1024);
-    sprintf(cmd, "ip link set dev %s arp off", iface);
-    system(cmd);
-    fprintf(stderr, "Turned off ARP of %s\n", iface);
-    char c;
-    c = getc(stdin);
-    if( c == -1){
-
-        memset(cmd, 0, 1024);
-        sprintf(cmd, "ip link set dev %s arp on", iface);
-        system(cmd);
-        fprintf(stderr, "\nTurning ARP on and exit\n");
-        usleep(100000);
-        exit(0);
-    }
-}
 int main(int argc, char** argv[]){
     if(argc != 6)
         usage();
@@ -59,15 +37,16 @@ int main(int argc, char** argv[]){
                 (uint8_t *) (ip_dns_fake+2),
                 (uint8_t *) (ip_dns_fake+3));     
 
+    pthread_t detect_ctrl_D;
+    pthread_create(&detect_ctrl_D, NULL, detect_ctrlD, (void*) &interface);
+    sleep(1);
+
     int fd = socket(AF_PACKET, SOCK_RAW, htons(ETH_P_ARP)); //this socket to get info about interface, not to catch packet
     if(fd < 0){
         fprintf(stderr, "Error in creating fd socket\n");
         return -1;
     }
 
-    pthread_t detect_ctrl_D;
-    pthread_create(&detect_ctrl_D, NULL, detect_ctrlD, (void*) &interface);
-    sleep(1);
     struct ifreq if_idx, if_mac, if_ip;
 
     //copy :()
@@ -155,4 +134,30 @@ int main(int argc, char** argv[]){
 
     free(args);
 
+}
+
+void usage()
+{   
+    fprintf(stderr, "DNS SPOOFING TOOL\nAuthor: sonnh\n");
+    fprintf(stderr, "Usage: ./spoof <interface> <target> <gateway> <qname> <dns ip>\n");
+    exit(0);
+}
+void* detect_ctrlD(void* interface){
+    char* iface = (char*) interface;
+    char cmd[1024];
+    memset(cmd, 0, 1024);
+    sprintf(cmd, "ip link set dev %s arp off", iface);
+    system(cmd);
+    fprintf(stderr, "Turned off ARP of %s\n", iface);
+    char c;
+    c = getc(stdin);
+    if( c == -1){
+
+        memset(cmd, 0, 1024);
+        sprintf(cmd, "ip link set dev %s arp on", iface);
+        system(cmd);
+        fprintf(stderr, "\nTurning ARP on and exit\n");
+        usleep(100000);
+        exit(0);
+    }
 }

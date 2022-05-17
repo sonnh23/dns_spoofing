@@ -15,11 +15,10 @@
 #include <net/if.h>
 #include <pthread.h>
 
-
 #define ARP_PACKET_LEN sizeof(struct ether_header) + sizeof(struct ether_arp)
 
 
-uint8_t* construct_arp_pac(int sock_r, struct sockaddr_ll socket_address, unsigned int addr_len,
+uint8_t* construct_arp_pac(int sock_r, unsigned int addr_len,
                             uint8_t* sha, uint8_t* tha, uint8_t* spa, uint8_t* tpa, unsigned int op);
 
 uint8_t* get_mac(int sock_r, struct sockaddr_ll socket_address, unsigned int addr_len,

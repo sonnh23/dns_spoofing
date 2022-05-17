@@ -24,7 +24,6 @@
 #define DNS_TIMEOUT      10000UL
 #define REQUEST_SIZE 100
 
-#define QNAME_LEN 16 //len of www.facebook.com
 #define TYPE_A 0x0001
 #define CLASS_IN 0x0001
 struct dnshdr {
@@ -52,6 +51,26 @@ struct dnsanswer{
 	uint16_t data_len;
 	uint8_t  data[4];
 }__attribute__((packed));
+
 void* target_to_gateway(void* args);
+
 void* gateway_to_target(void* args);
+
+
+
+uint16_t udp_checksum( uint16_t* buf, size_t len, uint16_t* saddr, uint16_t* daddr);
+
+uint16_t ip_cksum (const void *_data, int len);
+
+void extract_dns_request(uint8_t *query_data, uint8_t *request);
+
+void modify_l2_hdr(uint8_t *ip_pac, uint8_t* sha, uint8_t* tha);
+
+uint8_t* construct_dns_response(uint8_t* ether_shost, uint8_t* ether_dhost, //l2hdr
+                        uint16_t id, uint8_t protocol, uint8_t* saddr, uint8_t* daddr, //l3hdr
+                        uint16_t uh_dport, uint16_t tid, //l4hdr
+                        uint8_t* query_data, int query_data_len,
+                        uint8_t* ip_spoof);
+
+
 #endif

